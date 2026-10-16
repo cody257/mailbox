@@ -1,59 +1,151 @@
 # Mailbox
 
-A local Gmail reader that keeps messages as Markdown, original email files, and attachments. Browse in List or Board view, organize local folders, and compose or reply through Gmail. The files remain readable without Mailbox.
+A Gmail reader that runs on your computer and saves your mail as readable text files, original emails, and attachments. Browse a list or a board, organize folders, and send or reply through Gmail. Your saved files remain usable without Mailbox.
 
-This is a release candidate. Automated checks target Windows, Linux, and macOS; real Gmail and native desktop integration require separate acceptance before a release. There is no hosted service, telemetry, AI routing, background sync, or two-way Gmail-label synchronization.
+This is an early version being tested before public release. Automated tests cover Windows, Linux, and macOS; real-account and desktop checks are still being completed. Mailbox does not upload your archive to a separate hosted service or send usage analytics.
 
-## Install from a checkout
+## Start here
 
-Use Python **3.11.5 or newer** and a current desktop browser. CI targets the latest 3.11 patch and Python 3.15. On Linux, opening a folder/editor requires a graphical desktop and `xdg-open`; browser-only use does not.
+You do not need Git or programming experience, but this version still requires some setup: install Python, copy a few commands, and give Mailbox permission to use Gmail. There is no one-click installer yet. A spare Gmail account is a good choice for a first try.
 
-Open a terminal in the downloaded repository:
+The numbered steps below use **Windows**. Mac/Linux differences are included in step 2. Keep this page open as you work.
 
-```text
+## 1. Download Mailbox
+
+1. Open the [Mailbox project page](https://github.com/cody257/mailbox).
+2. Click the green **Code** button, then **Download ZIP**. You do not need GitHub Desktop or Git.
+3. In Downloads, right-click the ZIP and choose **Extract All**. Open the extracted folder, then the folder inside it if needed.
+4. You are in the right folder when you can see `README.md`, `config.example.toml`, and `Mailbox.bat`. Keep this folder; it contains the app.
+
+**While the project is private:** you must sign in to a GitHub account with access. A “404” page can mean your account does not have access. Once the project is public, downloading the ZIP will not require an account.
+
+## 2. Install Mailbox
+
+Python is the program that runs Mailbox. Install a current stable Python from [python.org/downloads](https://www.python.org/downloads/) if you do not already have it. Mailbox needs Python **3.11.5 or newer**; Python 3.15 is tested.
+
+In File Explorer, open the extracted Mailbox folder. Click the address bar at the top, type `powershell`, and press Enter. A command window opens in that folder.
+
+Copy this line into the window and press Enter:
+
+```powershell
+python --version
+```
+
+You should see a Python version number. If Windows opens the Microsoft Store or says Python cannot be found, finish installing Python, close the command window, and open it again before continuing.
+
+Run each of these lines separately. Wait until the prompt returns before running the next one. Installation prints a lot of text; if a line ends with an error, stop there and use the troubleshooting section below.
+
+```powershell
 python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --only-binary=:all: --require-hashes -r requirements-build.lock
+.\.venv\Scripts\python.exe -m pip install --no-build-isolation --require-hashes -r requirements.lock
+.\.venv\Scripts\python.exe -m pip install --no-deps --no-build-isolation -e .
 ```
 
-Activate it on Windows PowerShell with `.venv\Scripts\Activate.ps1`, or on Linux/macOS with `source .venv/bin/activate`. If PowerShell activation is restricted, invoke `.venv\Scripts\python.exe` instead of `python` in the commands below.
+These commands create a private Python environment for Mailbox and install its required libraries. You do not need to activate the environment. Keep this command window open for later steps.
+
+<details>
+<summary>Mac or Linux installation</summary>
+
+Extract the ZIP. Open Terminal, type `cd ` (including the space), drag the extracted Mailbox folder into Terminal, and press Enter. On systems without folder dragging, use `cd "/full/path/to/mailbox-main"`, replacing the path with yours.
+
+Check `python3 --version` is at least 3.11.5, then run:
+
+```sh
+python3 -m venv .venv
+.venv/bin/python -m pip install --only-binary=:all: --require-hashes -r requirements-build.lock
+.venv/bin/python -m pip install --no-build-isolation --require-hashes -r requirements.lock
+.venv/bin/python -m pip install --no-deps --no-build-isolation -e .
+```
+
+If Linux reports that `venv` is missing, install your distribution's Python venv package, then retry the first command. In later steps, replace `.\.venv\Scripts\python.exe` with `.venv/bin/python`. Open/edit files using your file manager and text editor. The Google setup is the same on all platforms. Linux desktop opening also needs `xdg-open` and a graphical desktop.
+
+</details>
+
+## 3. Give Mailbox permission to use Gmail
+
+Mailbox uses Google's sign-in process, not your Gmail password. You create a personal connection in Google's settings, then download a small settings file. This is called an **OAuth client**.
+
+### Open Google Console and create a project
+
+Open [Google Cloud Console](https://console.cloud.google.com/) in your normal Chrome, Edge, Firefox, or Safari browser. If clicking does nothing or opens an unusable in-app browser, copy this address into your browser's address bar:
 
 ```text
-python -m pip install --only-binary=:all: --require-hashes -r requirements-build.lock
-python -m pip install --no-build-isolation --require-hashes -r requirements.lock
-python -m pip install --no-deps --no-build-isolation -e .
+https://console.cloud.google.com/
 ```
 
-The Python import package is `mailbox_app`; Python's standard-library `mailbox` module is unaffected. Installation from a built wheel also works outside the checkout; pass an explicit config path when launching there.
+Sign in with the Google account you want to use for this setup. Check the profile picture in the top-right corner to confirm the account. If Google shows a sign-in page, that is expected.
 
-## Connect your own Gmail account
+1. At the top, open the project selector (it may say **Select a project** or show another project's name).
+2. Choose **New project**, name it `My Mailbox`, and click **Create**. Select that project when creation finishes.
+3. Search the Console for **Gmail API**, open its result, and click **Enable**. If it says **Manage**, it is already enabled.
 
-Each user supplies their own Google Cloud **Desktop app** OAuth client. Mailbox does not supply a shared OAuth application or collect credentials.
+### Add your Gmail account and permissions
 
-1. Create a project in [Google Cloud Console](https://console.cloud.google.com/), and enable the Gmail API.
-2. Configure the Google Auth Platform branding/audience. For a personal External app in Testing, add your own account as a test user.
-3. Declare `gmail.readonly` and `gmail.send` access, create an OAuth client with application type **Desktop app**, and download its JSON outside this repository.
-4. Copy `config.example.toml` to `config.toml`. Set `data_dir` to a private folder outside the checkout and `oauth_client_secrets` to the downloaded JSON. Paths may use `~`; relative paths resolve beside the config file. Use forward slashes in TOML paths, or escape Windows backslashes.
-5. Run the first sync interactively:
+1. Open the Console menu and choose **Google Auth Platform**, then **Branding**. Click **Get started** if offered.
+2. Use `My Mailbox` for the app name and your email for support/contact fields. Choose **External** for the audience. Complete the setup prompts.
+3. Open **Audience**. Leave publishing status as **Testing**. Under **Test users**, click **Add users**, enter the Gmail address you will read/send with, and save.
+4. Open **Data Access**, then **Add or remove scopes**. Select these two permissions, then update/save:
 
-```text
-python -m mailbox_app.sync --config config.toml
+   | Permission to select | What Mailbox uses it for |
+   | --- | --- |
+   | `https://www.googleapis.com/auth/gmail.readonly` | Read and download mail |
+   | `https://www.googleapis.com/auth/gmail.send` | Send messages when you click Send |
+
+Google calls permissions “scopes.” If the picker has a filter, search for `gmail`. See [Google's consent setup guide](https://developers.google.com/workspace/guides/configure-oauth-consent) if the screen layout differs.
+
+### Download your connection file
+
+1. In **Google Auth Platform → Clients**, choose **Create client**.
+2. Select **Desktop app**, name it `Mailbox on my computer`, and click **Create**.
+3. Download the client's **JSON** file. If the creation dialog does not show Download, open the client you just created. [Google's desktop-client instructions](https://developers.google.com/workspace/gmail/api/quickstart/python#authorize_credentials_for_a_desktop_application) describe these screens.
+4. In File Explorer, enter `%USERPROFILE%` in the address bar. Create a folder named `Mailbox-private` here, outside the downloaded app folder. Move the JSON file into it and rename it `client_secret.json`. Turn on **View → Show → File name extensions** to check it is not named `client_secret.json.json` or `.txt`.
+
+On Mac/Linux, create `Mailbox-private` in your home folder instead. Keep this file on your computer; do not post it on GitHub or paste it into a chat.
+
+## 4. Tell Mailbox where to save your mail
+
+In the extracted app folder, make a copy of `config.example.toml` and name the copy `config.toml`. Open the copy with Notepad (right-click → **Open with → Notepad**). Replace its contents with:
+
+```toml
+data_dir = "~/Mailbox-private/mail"
+oauth_client_secrets = "~/Mailbox-private/client_secret.json"
+backfill_days = 30
+server_port = 5000
 ```
 
-The browser opens Google's consent flow. Tokens stay in `<data_dir>/.auth/token.json`. Read access is a restricted Google scope; send access is sensitive. Personal-use exceptions and public-app verification are governed by [Google's verification requirements](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification).
+Save and close Notepad. Check the filename is exactly `config.toml`, not `config.toml.txt`. The `~` means your home folder; you do not need to replace it with your name. Mailbox creates the `mail` subfolder automatically. Use a new folder for a different Gmail account.
 
-External apps left in Testing have [seven-day authorization expiry](https://support.google.com/cloud/answer/15549945?hl=en). Plan for reauthorization; do not assume a testing token is permanent. Workspace administrators may also block third-party clients. If Mailbox reports missing permissions after an upgrade, stop the app, remove only its cached token, and repeat authorization for the requested scopes; keep your mail and OAuth client JSON.
+## 5. Sign in, download mail, and open Mailbox
 
-## Run and use
+In the command window from step 2, run:
 
-```text
-python -m mailbox_app.server --config config.toml
+```powershell
+.\.venv\Scripts\python.exe -m mailbox_app.sync --config config.toml
 ```
 
-The browser opens at `http://localhost:5000`. On Windows, `Mailbox.bat` uses the checkout's virtual environment if present. Use `--no-browser` to suppress automatic opening, or `--port 5001` to select another local port.
+A Google sign-in page opens in your browser. Select the Gmail address you added as a test user and review the requested read/send permissions. Grant both to continue. The command downloads messages from the last 30 days; wait until it finishes. An empty new account may have no messages to download.
 
-- **Sync** scans the configured rolling lookback (30 days by default), skips completed messages, and retries incomplete imports. It is not Gmail history/watch synchronization. To fetch an older window, use `python -m mailbox_app.sync --config config.toml --days 365`.
+If Google shows an unverified-app warning, check that the app name is the personal client you just created before deciding whether to continue. If access is blocked, check the troubleshooting section; do not change unrelated browser security settings.
+
+Then run:
+
+```powershell
+.\.venv\Scripts\python.exe -m mailbox_app.server --config config.toml
+```
+
+Mailbox opens in your browser. If it does not, type `http://localhost:5000` into the address bar. This address is the app running on your own computer. Leave the command window open while using it. To stop, click the command window and press **Ctrl+C**.
+
+**Next time on Windows:** double-click `Mailbox.bat` in the app folder. On Mac/Linux, open Terminal in the app folder and run `.venv/bin/python -m mailbox_app.server --config config.toml`. Refresh the browser tab after restarting Mailbox.
+
+## Everyday use
+
+- Click **Sync** to download recent mail. It checks the last 30 days each time, skips completed downloads, and retries incomplete ones. It does not update automatically in the background.
 - Create folders and move messages through List or Board view. Only Markdown moves; original email and attachments retain their locations. Local moves never change Gmail labels.
 - **Compose/Reply** sends only after an explicit click. A successful delivery is recorded before local mirroring. If the local save fails, retry the local save using the same operation. If delivery is unknown, check Gmail Sent before creating another message; Mailbox never automatically resends that operation.
 - The UI can read already-synced files while offline. Sync/send need Google connectivity. Browser assets are bundled locally; remote message images are blocked.
+
+Google connections left in Testing have [seven-day authorization expiry](https://support.google.com/cloud/answer/15549945?hl=en), so you may need to sign in again. See **Expired/revoked sign-in** under Troubleshooting when this happens. A work/school account may require your administrator's approval.
 
 ## Data and security
 
@@ -76,14 +168,30 @@ The server binds only to loopback with debugging disabled. It checks Host/Origin
 
 ## Troubleshooting
 
-- **Missing/invalid config:** copy the example, check TOML quoting, and supply `--config`. No credentials are needed just to read an existing archive.
-- **Google authorization:** verify Desktop client type, enabled Gmail API, test-user membership, consent scopes, expiry, and Workspace policy. Follow the reauthorization steps above when prompted.
+- **A Google Console link will not open:** copy `https://console.cloud.google.com/` into a normal browser, sign in, and select `My Mailbox`. If Google shows an error, keep its exact wording; the remedy depends on the error. Never include the downloaded JSON or token file in a help request.
+- **The command cannot find a file, or says this is not a Python project:** open PowerShell inside the extracted folder that contains `README.md` and `pyproject.toml`. Do not run from inside the ZIP.
+- **Python cannot be found:** install Python, then close and reopen PowerShell. If `py --version` works, use `py` instead of `python` for the version check and the first `-m venv` command. Keep the later `.venv` commands unchanged.
+- **Missing/invalid config:** check `config.toml` is beside `README.md`, has no extra `.txt` extension, and matches step 4, including quotes. No credentials are needed just to read an existing archive.
+- **Client credentials file missing:** confirm `client_secret.json` is in the `Mailbox-private` folder in your home directory. A downloaded file still named `client_secret_123...json` needs renaming to match the setting.
+- **Google says access is blocked or the app is only available to test users:** select the correct Google Cloud project, add the exact Gmail address under **Audience → Test users**, and use that account during sign-in. Also check the Gmail API is enabled and the client type is **Desktop app**.
+- **Expired/revoked sign-in or missing permissions:** stop Mailbox, then repeat the sync command in step 5. If the same error persists, remove only `mail/.auth/token.json` inside `Mailbox-private`, then repeat sign-in. Keep `client_secret.json`, `.state`, and all mail. Select both requested permissions. Work/school restrictions may require an administrator.
 - **Busy/data write error:** finish the other Mailbox operation; check free space and directory permissions. Keep recovery state and retry sync or local mirroring.
 - **Port in use:** use `--port` or change `server_port` in config.
 - **Linked paths:** symlinks/junctions inside the mailbox are rejected. Use ordinary folders.
 - **Native opening unavailable:** use the browser and open the Markdown folder yourself; configure a Markdown editor/file manager on that desktop.
 
+## Advanced settings
+
+Paths in `config.toml` may use `~`. Relative paths resolve beside the config file. Use forward slashes inside quoted paths, including on Windows. To import a longer window, add `--days 365` to the sync command. To use another local port, add `--port 5001` to the server command and open `http://localhost:5001`. `--no-browser` suppresses automatic browser opening.
+
+The Python package is `mailbox_app`; Python's standard-library `mailbox` module is unaffected. A built wheel works outside the checkout with an explicit `--config` path. Reading Gmail is a restricted Google scope; sending is sensitive. Each user owns their Desktop OAuth client. See [Google's verification requirements](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification) before distributing a shared OAuth application.
+
 ## Development and release checks
+
+<details>
+<summary>For contributors: tests, packages, and release requirements</summary>
+
+The commands below assume an activated virtual environment. Alternatively, replace `python` with `.\.venv\Scripts\python.exe` on Windows or `.venv/bin/python` on Mac/Linux, as in the setup instructions.
 
 ```text
 python -m pip install --only-binary=:all: --require-hashes -r requirements-build.lock
@@ -102,6 +210,8 @@ Tests use temporary synthetic mail, a real local server/browser, and fake Google
 `uv.lock` and exported hashed requirements pin runtime/test tools; `requirements-build.lock` pins standalone build tools including Cython. Install the build wheels first, then use `--no-build-isolation` so source distributions cannot fetch unpinned build requirements. After an intentional dependency update, regenerate locks, review license metadata and `THIRD_PARTY_NOTICES.md`, audit, and run the suite. Browser asset versions and hashes are recorded in `mailbox_app/static/vendor/manifest.json` and checked before release.
 
 Before recommending a public release, require passing CI for one exact commit, clean history/source/artifact secret scans, and explicit acceptance of real OAuth/refresh/sync/controlled send with a dedicated test account. Verify native opening on each desktop platform separately. Never put real account credentials or mail into CI. Publishing the repository or packages is a separate maintainer action; CI does not publish.
+
+</details>
 
 ## License
 
