@@ -82,23 +82,29 @@ Sign in with the Google account you want to use for this setup. Check the profil
 
 ### Add your Gmail account and permissions
 
-1. Open the Console menu and choose **Google Auth Platform**, then **Branding**. Click **Get started** if offered.
-2. Use `My Mailbox` for the app name and your email for support/contact fields. Choose **External** for the audience. Complete the setup prompts.
-3. Open **Audience**. Leave publishing status as **Testing**. Under **Test users**, click **Add users**, enter the Gmail address you will read/send with, and save.
-4. Open **Data Access**, then **Add or remove scopes**. Select these two permissions, then update/save:
+1. Open [Google Auth setup directly](https://console.cloud.google.com/auth/overview), and check that `My Mailbox` is selected. The menu route is **☰ → APIs & Services → OAuth consent screen**; Google Auth Platform may not appear in the main menu. On **OAuth Overview**, click **Get started** when it says **Google Auth Platform not configured yet**.
+2. Complete the four sections of **Project configuration** in order:
+   - **App Information:** enter `My Mailbox` for **App name**, choose your address from the **User support email** dropdown, and click **Next**.
+   - **Audience:** choose **External** (personal Gmail accounts cannot use Internal), then click **Next**. This starts in Testing mode; it does not make your app public.
+   - **Contact Information:** enter your email in **Email addresses**, then click **Next**.
+   - **Finish:** read Google's linked User Data Policy. If you agree, select its checkbox, click **Continue**, then **Create** at the bottom.
+3. Open **Audience**. Check that publishing status is **Testing**. Under **Test users**, click **Add users**, enter the Gmail address you will read/send with, and press **Enter** so it becomes a selected email entry. Click **Save**. Your address should now appear in the test-user table.
+4. Open **Data Access**, then **Add or remove scopes**. In the panel, scroll to **Manually add scopes**. Paste these two lines into **Manually paste scopes**:
 
-   | Permission to select | What Mailbox uses it for |
-   | --- | --- |
-   | `https://www.googleapis.com/auth/gmail.readonly` | Read and download mail |
-   | `https://www.googleapis.com/auth/gmail.send` | Send messages when you click Send |
+   ```text
+   https://www.googleapis.com/auth/gmail.readonly
+   https://www.googleapis.com/auth/gmail.send
+   ```
 
-Google calls permissions “scopes.” If the picker has a filter, search for `gmail`. See [Google's consent setup guide](https://developers.google.com/workspace/guides/configure-oauth-consent) if the screen layout differs.
+   Click **Add to table**, wait for both entries to appear, then click **Update**. Back on the Data Access page, click **Save**. You should see `gmail.send` under sensitive scopes and `gmail.readonly` under restricted scopes, with no other selected permissions.
+
+Google calls permissions “scopes.” These allow reading/downloading mail and sending when you click Send. See [Google's consent setup guide](https://developers.google.com/workspace/guides/configure-oauth-consent) if the screen layout differs.
 
 ### Download your connection file
 
 1. In **Google Auth Platform → Clients**, choose **Create client**.
-2. Select **Desktop app**, name it `Mailbox on my computer`, and click **Create**.
-3. Download the client's **JSON** file. If the creation dialog does not show Download, open the client you just created. [Google's desktop-client instructions](https://developers.google.com/workspace/gmail/api/quickstart/python#authorize_credentials_for_a_desktop_application) describe these screens.
+2. Select **Desktop app**, name it `Mailbox on my computer`, leave **Use this client for an AI-powered agent** unchecked, and click **Create**.
+3. In **OAuth client created**, click **Download JSON**. Confirm the file has actually reached your browser's Downloads folder **before clicking OK**. Google no longer lets you download that secret again after closing this dialog. Use your normal desktop browser for this step; an embedded/in-app browser may not save the download. [Google's desktop-client instructions](https://developers.google.com/workspace/gmail/api/quickstart/python#authorize_credentials_for_a_desktop_application) describe these screens.
 4. In File Explorer, enter `%USERPROFILE%` in the address bar. Create a folder named `Mailbox-private` here, outside the downloaded app folder. Move the JSON file into it and rename it `client_secret.json`. Turn on **View → Show → File name extensions** to check it is not named `client_secret.json.json` or `.txt`.
 
 On Mac/Linux, create `Mailbox-private` in your home folder instead. Keep this file on your computer; do not post it on GitHub or paste it into a chat.
@@ -205,7 +211,17 @@ python -m pip_audit --require-hashes --disable-pip -r requirements-dev.lock
 python scripts/audit_js.py
 ```
 
-Tests use temporary synthetic mail, a real local server/browser, and fake Google transport/native launch boundaries. No test requires Gmail credentials. CI runs Chromium on all three operating systems and Firefox/WebKit rendering checks on Linux. Failure traces contain synthetic data only. Run with `--tracing retain-on-failure --screenshot only-on-failure` to capture local failures.
+The default tests use temporary synthetic mail, a real local server/browser, and fake Google transport/native launch boundaries. They require no Gmail credentials. CI runs Chromium on all three operating systems and Firefox/WebKit rendering checks on Linux. Failure traces contain synthetic data only. Run with `--tracing retain-on-failure --screenshot only-on-failure` to capture local failures.
+
+Google Console setup needs a separate, human-assisted live acceptance run; CI does not validate Google's signed-in screens. With Chrome installed, run this from PowerShell after installing the development dependencies:
+
+```powershell
+$env:MAILBOX_LIVE_SETUP = "1"
+.\.venv\Scripts\python.exe -m pytest tests/live/test_google_setup.py -s -q
+Remove-Item Env:MAILBOX_LIVE_SETUP
+```
+
+Use a dedicated test account/project and follow the README in the browser it opens. The test checks enabled Gmail API, External/Testing, exactly one test user, exactly the two scopes, a Desktop client, and an actual valid JSON download. It leaves login, agreements, and permission changes to the operator, and does not read or send Gmail messages. It saves the downloaded file only to a new private path you provide outside the checkout. Do not enable traces, screenshots, recordings, or `--showlocals` for this live run. This test is skipped by default and always skipped in CI; a skip is not acceptance evidence.
 
 `uv.lock` and exported hashed requirements pin runtime/test tools; `requirements-build.lock` pins standalone build tools including Cython. Install the build wheels first, then use `--no-build-isolation` so source distributions cannot fetch unpinned build requirements. After an intentional dependency update, regenerate locks, review license metadata and `THIRD_PARTY_NOTICES.md`, audit, and run the suite. Browser asset versions and hashes are recorded in `mailbox_app/static/vendor/manifest.json` and checked before release.
 
