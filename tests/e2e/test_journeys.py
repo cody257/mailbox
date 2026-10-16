@@ -132,9 +132,29 @@ def test_compose_and_reply_exact_mime_and_single_mirror(mailbox_page, live_mailb
     assert reply["References"] == "<ancestor@example.test> <inbox001@example.test>"
     assert reply.get_content() == "Independent reply text."
     assert len(list(env.paths.sent_dir.glob("*.md"))) == 2
-    assert env.paths.original_path("sent0001").read_bytes() == env.gmail.sent[0]
-    assert env.paths.original_path("sent0002").read_bytes() == env.gmail.sent[1]
+    assert env.paths.original_path("sent0001").read_bytes() == env.gmail.messages_by_id['sent0001']
+    assert env.paths.original_path("sent0002").read_bytes() == env.gmail.messages_by_id['sent0002']
+    assert frontmatter.load(env.paths.find_md_by_id('sent0001'))['message-id'] == '<canonical-sent0001@mail.gmail.com>'
+    assert frontmatter.load(env.paths.find_md_by_id('sent0002'))['message-id'] == '<canonical-sent0002@mail.gmail.com>'
     assert json.loads((env.gmail.root / "capture.json").read_text())["calls"] == 2
+
+
+def test_reply_to_sent_note_uses_canonical_gmail_message_id(mailbox_page, live_mailbox):
+    page, env = mailbox_page, live_mailbox
+    compose(page, 'Canonical reply target')
+    assert send_ui(page).json()['status'] == 'sent'
+    expect(page.locator('#compose-send')).to_have_count(0)
+    page.locator('.folder-item[data-path="sent"]').click()
+    page.locator('.message-item').filter(has_text='Canonical reply target').click()
+    page.locator('#reply-btn').click()
+    page.locator('#compose-body').fill('Reply using the canonical Gmail identifier.')
+    assert send_ui(page).json()['status'] == 'sent'
+    expect(page.locator('#compose-send')).to_have_count(0)
+    reply = BytesParser(policy=policy.default).parsebytes(env.gmail.sent[1])
+    assert reply['In-Reply-To'] == '<canonical-sent0001@mail.gmail.com>'
+    assert reply['References'] == '<canonical-sent0001@mail.gmail.com>'
+    assert len(env.gmail.sent) == 2
+    assert len(list(env.paths.sent_dir.glob('*.md'))) == 2
 
 
 def test_sync_interrupted_attachment_write_recovers_without_duplicates(mailbox_page, live_mailbox):

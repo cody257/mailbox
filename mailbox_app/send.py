@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import json
+from email import message_from_bytes, policy
 from email.mime.text import MIMEText
 from email.utils import formatdate, make_msgid
 
@@ -19,10 +20,38 @@ def _save(paths: Paths, journal, state):
     paths.atomic_write(journal, json.dumps(state, ensure_ascii=True).encode('utf8'))
 
 
-def _mirror(paths: Paths, journal, state):
+def _canonical_bytes(raw: str) -> bytes:
+    if not isinstance(raw, str) or not raw:
+        raise ValueError('Gmail returned no canonical message.')
+    decoded = base64.b64decode(raw + '=' * (-len(raw) % 4), altchars=b'-_', validate=True)
+    if not message_from_bytes(decoded, policy=policy.default).get('Message-ID'):
+        raise ValueError('Gmail returned an incomplete canonical message.')
+    return decoded
+
+
+def _mirror(paths: Paths, journal, state, service=None):
     try:
-        md_path = import_message(paths, base64.urlsafe_b64decode(state['raw']),
-                                 state['id'], state.get('labels') or ['SENT'])
+        if 'canonical_raw' not in state:
+            existing = paths.find_md_by_id(state['id'])
+            if existing is not None and not state.get('canonical_required'):
+                # Old journals used submitted MIME. Repairing existing notes or
+                # originals needs an explicit migration; never silently replace
+                # a moved/edited import or claim that it was canonicalized.
+                state['path'] = existing.relative_to(paths.data_dir).as_posix()
+                return _result(state, 'sent' if state['status'] == 'sent' else 'sent_unmirrored')
+            service = service if service is not None else build_service(paths)
+            canonical = service.users().messages().get(userId='me', id=state['id'], format='raw').execute()
+            if canonical.get('id') != state['id']:
+                raise ValueError('Gmail returned a different message.')
+            _canonical_bytes(canonical.get('raw'))
+            state['canonical_raw'] = canonical['raw']
+            state['labels'] = canonical.get('labelIds') or ['SENT']
+            state['canonical_date'] = int(canonical.get('internalDate') or 0) or None
+            # Persist the fetched message before disk mirroring so an interrupted
+            # local save can finish later without another Gmail request.
+            _save(paths, journal, state)
+        md_path = import_message(paths, _canonical_bytes(state['canonical_raw']),
+                                 state['id'], state.get('labels') or ['SENT'], state.get('canonical_date'))
         state['path'] = md_path.relative_to(paths.data_dir).as_posix()
         state['status'] = 'sent'
         _save(paths, journal, state)
@@ -90,7 +119,8 @@ def send_message(
             msg['References'] = (' '.join(references) if isinstance(references, list) else references) or in_reply_to
         raw_b64 = base64.urlsafe_b64encode(msg.as_bytes()).decode('ascii')
         state = {'operation_id': operation_id, 'fingerprint': fingerprint,
-                 'raw': raw_b64, 'status': 'in_flight', 'id': None, 'path': None}
+                 'raw': raw_b64, 'canonical_required': True,
+                 'status': 'in_flight', 'id': None, 'path': None}
         # The intent must reach disk before any request capable of sending mail.
         _save(paths, journal, state)
         try:
@@ -111,4 +141,4 @@ def send_message(
             _save(paths, journal, state)
         except Exception:
             return _result(state, 'sent_unmirrored')
-        return _mirror(paths, journal, state)
+        return _mirror(paths, journal, state, service)

@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 from email.message import EmailMessage
+from email import message_from_bytes, policy
+import frontmatter
 from unittest.mock import patch
 from googleapiclient.errors import HttpError
 from httplib2 import Response
@@ -19,15 +21,27 @@ class FakeService:
         self.raw = raw
         self.sends = 0
         self.mode = 'normal'
+        self.canonical_raw = None
+        self.fetch_error = False
+        self.fetches = 0
     def users(self): return self
     def messages(self): return self
     def getProfile(self, **kwargs): return Result({'emailAddress': 'test@example.com'})
     def list(self, **kwargs): return Result({'messages': [{'id': 'abc'}]})
-    def get(self, **kwargs): return Result({'raw': base64.urlsafe_b64encode(self.raw).decode(), 'labelIds': ['INBOX']})
+    def get(self, **kwargs):
+        if kwargs['id'] == 'sentabc':
+            self.fetches += 1
+            if self.fetch_error:
+                return Result(error=TimeoutError('private fetch details'))
+            return Result({'id': 'sentabc', 'raw': base64.urlsafe_b64encode(self.canonical_raw).decode(), 'labelIds': ['SENT']})
+        return Result({'raw': base64.urlsafe_b64encode(self.raw).decode(), 'labelIds': ['INBOX']})
     def send(self, **kwargs):
         self.sends += 1
         if self.mode == 'unknown':
             return Result(error=TimeoutError('private detail'))
+        canonical = message_from_bytes(base64.urlsafe_b64decode(kwargs['body']['raw']), policy=policy.default)
+        canonical.replace_header('Message-ID', '<canonical-sentabc@mail.gmail.com>')
+        self.canonical_raw = canonical.as_bytes()
         return Result({'id': 'sentabc', 'labelIds': ['SENT']})
 
 
@@ -49,6 +63,117 @@ class RecoveryTests(unittest.TestCase):
         msg.set_content('mail body')
         msg.add_attachment(b'attachment', maintype='application', subtype='octet-stream', filename='../test.txt')
         self.service = FakeService(msg.as_bytes())
+
+    def test_sent_mirror_uses_canonical_gmail_message_id_and_raw(self):
+        with patch.object(send, 'build_service', return_value=self.service):
+            result = send.send_message(self.paths, to='to@example.com', body='test', operation_id='canonical')
+        self.assertEqual(result['status'], 'sent')
+        self.assertEqual(self.paths.original_path('sentabc').read_bytes(), self.service.canonical_raw)
+        note = frontmatter.load(self.paths.find_md_by_id('sentabc'))
+        self.assertEqual(note['message-id'], '<canonical-sentabc@mail.gmail.com>')
+        self.assertEqual(self.service.sends, 1)
+        self.assertEqual(self.service.fetches, 1)
+
+    def test_failed_canonical_fetch_is_accepted_and_retry_never_resends(self):
+        self.service.fetch_error = True
+        with patch.object(send, 'build_service', return_value=self.service):
+            result = send.send_message(self.paths, to='to@example.com', operation_id='fetch-failed')
+            self.assertEqual(result['status'], 'sent_unmirrored')
+            self.assertEqual(result['id'], 'sentabc')
+            self.assertFalse(self.paths.original_path('sentabc').exists())
+            self.assertIsNone(self.paths.find_md_by_id('sentabc'))
+            self.service.fetch_error = False
+            retry = send.send_message(Paths(self.paths.config), to='to@example.com', operation_id='fetch-failed')
+            self.assertEqual(retry['status'], 'sent')
+        self.assertEqual(self.service.sends, 1)
+        self.assertEqual(self.service.fetches, 2)
+        self.assertEqual(self.paths.original_path('sentabc').read_bytes(), self.service.canonical_raw)
+
+    def test_cached_canonical_message_can_finish_mirroring_without_network(self):
+        with patch.object(send, 'build_service', return_value=self.service), patch.object(sync, '_write_md', side_effect=OSError('disk')):
+            first = send.send_message(self.paths, to='to@example.com', operation_id='cached-canonical')
+        self.assertEqual(first['status'], 'sent_unmirrored')
+        with patch.object(send, 'build_service', side_effect=AssertionError('Must reuse cached canonical message')):
+            second = send.send_message(Paths(self.paths.config), to='to@example.com', operation_id='cached-canonical')
+        self.assertEqual(second['status'], 'sent')
+        self.assertEqual(self.paths.original_path('sentabc').read_bytes(), self.service.canonical_raw)
+        self.assertEqual(self.service.sends, 1)
+        self.assertEqual(self.service.fetches, 1)
+
+    def test_canonical_cache_disk_failure_keeps_acceptance_and_never_resends(self):
+        original_save = send._save
+        def fail_cache(paths, journal, state):
+            if 'canonical_raw' in state:
+                raise OSError('disk failure')
+            return original_save(paths, journal, state)
+        with patch.object(send, 'build_service', return_value=self.service):
+            with patch.object(send, '_save', side_effect=fail_cache):
+                first = send.send_message(self.paths, to='to@example.com', operation_id='cache-failure')
+            self.assertEqual(first['status'], 'sent_unmirrored')
+            self.assertFalse(self.paths.original_path('sentabc').exists())
+            state = json.loads((self.paths.state_dir / 'sends' / 'cache-failure.json').read_text(encoding='utf8'))
+            self.assertEqual(state['status'], 'accepted')
+            retry = send.send_message(Paths(self.paths.config), to='to@example.com', operation_id='cache-failure')
+        self.assertEqual(retry['status'], 'sent')
+        self.assertEqual(self.service.sends, 1)
+        self.assertEqual(self.service.fetches, 2)
+
+    def test_incomplete_or_mismatched_canonical_response_is_not_mirrored(self):
+        cases = [
+            {'id': 'sentabc', 'raw': ''},
+            {'id': 'wrongid', 'raw': base64.urlsafe_b64encode(b'Message-ID: <other@example.test>\n\nbody').decode()},
+            {'id': 'sentabc', 'raw': base64.urlsafe_b64encode(b'Subject: missing ID\n\nbody').decode()},
+        ]
+        with patch.object(send, 'build_service', return_value=self.service):
+            for index, response in enumerate(cases):
+                with self.subTest(response=response), patch.object(self.service, 'get', return_value=Result(response)):
+                    result = send.send_message(self.paths, to='to@example.com', operation_id=f'bad-canonical-{index}')
+                    self.assertEqual(result['status'], 'sent_unmirrored')
+                    self.assertFalse(self.paths.original_path('sentabc').exists())
+                    self.assertIsNone(self.paths.find_md_by_id('sentabc'))
+
+    def test_legacy_completed_journal_preserves_moved_edited_note_and_original(self):
+        with patch.object(send, 'build_service', return_value=self.service):
+            send.send_message(self.paths, to='to@example.com', operation_id='legacy-complete')
+        journal = self.paths.state_dir / 'sends' / 'legacy-complete.json'
+        state = json.loads(journal.read_text(encoding='utf8'))
+        state.pop('canonical_raw', None)
+        state.pop('canonical_required', None)
+        journal.write_text(json.dumps(state), encoding='utf8')
+        note = self.paths.find_md_by_id('sentabc')
+        moved = self.paths.data_dir / 'archive' / 'mine.md'
+        moved.parent.mkdir()
+        note.replace(moved)
+        moved.write_text(moved.read_text(encoding='utf8') + '\nmy edit', encoding='utf8')
+        expected = moved.read_bytes()
+        self.paths.original_path('sentabc').write_bytes(b'legacy original unchanged')
+        with patch.object(send, 'build_service', side_effect=AssertionError('No automatic legacy repair')):
+            result = send.send_message(Paths(self.paths.config), to='to@example.com', operation_id='legacy-complete')
+        self.assertEqual(result['status'], 'sent')
+        self.assertEqual(result['path'], 'archive/mine.md')
+        self.assertEqual(moved.read_bytes(), expected)
+        self.assertEqual(self.paths.original_path('sentabc').read_bytes(), b'legacy original unchanged')
+
+    def test_legacy_accepted_journal_with_existing_note_never_repairs_or_resends(self):
+        with patch.object(send, 'build_service', return_value=self.service):
+            send.send_message(self.paths, to='to@example.com', operation_id='legacy-accepted')
+        journal = self.paths.state_dir / 'sends' / 'legacy-accepted.json'
+        state = json.loads(journal.read_text(encoding='utf8'))
+        state.pop('canonical_raw')
+        state.pop('canonical_required')
+        state['status'] = 'accepted'
+        journal.write_text(json.dumps(state), encoding='utf8')
+        original = self.paths.original_path('sentabc')
+        original.write_bytes(b'legacy submitted MIME')
+        note = self.paths.find_md_by_id('sentabc')
+        note_bytes = note.read_bytes()
+        with patch.object(send, 'build_service', side_effect=AssertionError('No automatic legacy repair')):
+            result = send.send_message(Paths(self.paths.config), to='to@example.com', operation_id='legacy-accepted')
+        self.assertEqual(result['status'], 'sent_unmirrored')
+        self.assertEqual(result['id'], 'sentabc')
+        self.assertEqual(note.read_bytes(), note_bytes)
+        self.assertEqual(original.read_bytes(), b'legacy submitted MIME')
+        self.assertEqual(self.service.sends, 1)
 
     def test_sync_recovers_from_parse_failure_after_original_saved(self):
         with patch.object(sync, 'build_service', return_value=self.service):

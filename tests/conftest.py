@@ -3,6 +3,7 @@ import base64
 import json
 import threading
 from email.message import EmailMessage
+from email import message_from_bytes, policy
 from pathlib import Path
 
 import pytest
@@ -66,7 +67,10 @@ class GmailCapture:
         def action():
             identifier = kwargs["id"]
             self.fetches.append(identifier)
-            return {"id": identifier, "raw": base64.urlsafe_b64encode(self.messages_by_id[identifier]).decode(), "labelIds": ["INBOX", "UNREAD"], "internalDate": "1792065600000"}
+            if self.mode == 'canonical_failure' and identifier.startswith('sent'):
+                raise TimeoutError('Synthetic canonical-message fetch failed')
+            labels = ['SENT'] if identifier.startswith('sent') else ['INBOX', 'UNREAD']
+            return {"id": identifier, "raw": base64.urlsafe_b64encode(self.messages_by_id[identifier]).decode(), "labelIds": labels, "internalDate": "1792065600000"}
         return Call(action)
 
     def getProfile(self, **kwargs):
@@ -86,6 +90,9 @@ class GmailCapture:
                 from httplib2 import Response
                 raise HttpError(Response({"status": "400"}), b'{"error":{"message":"Synthetic rejection"}}')
             identifier = f"sent{index:04d}"
+            canonical = message_from_bytes(raw, policy=policy.default)
+            canonical.replace_header('Message-ID', f'<canonical-{identifier}@mail.gmail.com>')
+            self.messages_by_id[identifier] = canonical.as_bytes()
             if self.mode == "disk_failure":
                 self.paths.original_path(identifier).mkdir()
             return {"id": identifier, "labelIds": ["SENT"]}

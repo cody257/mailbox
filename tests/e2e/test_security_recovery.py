@@ -138,7 +138,7 @@ def test_accepted_send_disk_failure_retries_mirror_only(mailbox_page, live_mailb
     result = browser_post(page, "/api/send", request.value.post_data_json)
     assert result["data"]["status"] == "sent"
     assert len(env.gmail.sent) == 1
-    assert env.paths.original_path("sent0001").read_bytes() == env.gmail.sent[0]
+    assert env.paths.original_path("sent0001").read_bytes() == env.gmail.messages_by_id['sent0001']
     assert len(list(env.paths.sent_dir.glob("*.md"))) == 1
     repeated = browser_post(page, "/api/send", request.value.post_data_json)
     assert repeated["data"]["status"] == "sent"
