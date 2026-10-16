@@ -30,6 +30,41 @@ def test_compose_does_not_steal_focus_after_user_selects_subject(mailbox_page):
     expect(page.locator('#compose-subject')).to_be_focused()
 
 
+def test_accepted_send_refresh_failure_does_not_become_delivery_failure(mailbox_page, live_mailbox):
+    page, env = mailbox_page, live_mailbox
+    compose(page, 'Sent before server restart')
+    def expire_token_before_refresh(route):
+        # Keep the listening port while reproducing restart's token rotation;
+        # the real server, rather than a mocked response, rejects this request.
+        env.app.config['MAILBOX_TOKEN'] = 'rotated-synthetic-session'
+        route.continue_()
+    page.route('**/api/folders', expire_token_before_refresh)
+    with page.expect_response(lambda response: response.url.endswith('/api/folders')) as refresh:
+        assert send_ui(page).json()['status'] == 'sent'
+    assert refresh.value.status == 403
+    expect(page.locator('#compose-send')).to_have_count(0)
+    expect(page.locator('.toast.error')).to_contain_text('Sent, but')
+    assert len(env.gmail.sent) == 1
+
+
+def test_late_send_response_does_not_close_a_replacement_dialog(mailbox_page, live_mailbox):
+    page, env = mailbox_page, live_mailbox
+    compose(page, 'Pending dialog')
+    held = []
+    page.route('**/api/send', lambda route: held.append(route))
+    with page.expect_request(lambda request: request.url.endswith('/api/send')):
+        page.locator('#compose-send').click()
+    page.locator('#compose-close').click()
+    page.locator('#compose-btn').click()
+    expect(page.locator('#compose-subject')).to_have_value('Pending dialog')
+    with page.expect_response(lambda response: response.url.endswith('/api/send')):
+        held.pop().continue_()
+    # Wait for post-send refresh, proving the original handler has completed.
+    expect(page.locator('.toast')).to_contain_text('Sent.')
+    expect(page.locator('#compose-subject')).to_have_value('Pending dialog')
+    assert len(env.gmail.sent) == 1
+
+
 def test_partial_sync_shows_failure_and_retry_guidance(mailbox_page, live_mailbox):
     page, env = mailbox_page, live_mailbox
     # A real filesystem obstruction fails one import; the others still work.

@@ -481,31 +481,35 @@ function openCompose({ replyTo } = {}) {
       </div>
     </div>
   `;
-  const close = () => (root.innerHTML = "");
-  $("compose-close").addEventListener("click", close);
-  $("compose-cancel").addEventListener("click", close);
+  const dialog = root.querySelector(".modal");
+  const composeElement = (id) => dialog.querySelector("#" + id);
+  const close = () => {
+    if (root.contains(dialog)) root.innerHTML = "";
+  };
+  composeElement("compose-close").addEventListener("click", close);
+  composeElement("compose-cancel").addEventListener("click", close);
   if (pending) {
-    for (const field of ["to", "cc", "subject", "body"]) $("compose-" + field).value = pending[field] || "";
-    $("compose-status").textContent = "A previous send needs confirmation. Check its status before creating another message.";
-    $("compose-send").textContent = "Check send status";
-    for (const field of ["to", "cc", "subject", "body"]) $("compose-" + field).disabled = true;
+    for (const field of ["to", "cc", "subject", "body"]) composeElement("compose-" + field).value = pending[field] || "";
+    composeElement("compose-status").textContent = "A previous send needs confirmation. Check its status before creating another message.";
+    composeElement("compose-send").textContent = "Check send status";
+    for (const field of ["to", "cc", "subject", "body"]) composeElement("compose-" + field).disabled = true;
   }
-  $("compose-send").addEventListener("click", async () => {
+  composeElement("compose-send").addEventListener("click", async () => {
     const body = pending || {
       operation_id: operationId,
-      to: $("compose-to").value.trim(),
-      cc: $("compose-cc").value.trim(),
-      subject: $("compose-subject").value.trim(),
-      body: $("compose-body").value,
+      to: composeElement("compose-to").value.trim(),
+      cc: composeElement("compose-cc").value.trim(),
+      subject: composeElement("compose-subject").value.trim(),
+      body: composeElement("compose-body").value,
       in_reply_to: inReplyTo || null,
       references: refs || null,
     };
     if (!body.to) { toast("To: is required", "error"); return; }
     pending = body;
     sessionStorage.setItem("mailbox.pendingSend", JSON.stringify(pending));
-    for (const field of ["to", "cc", "subject", "body"]) $("compose-" + field).disabled = true;
-    $("compose-send").disabled = true;
-    $("compose-send").textContent = "Sending…";
+    for (const field of ["to", "cc", "subject", "body"]) composeElement("compose-" + field).disabled = true;
+    composeElement("compose-send").disabled = true;
+    composeElement("compose-send").textContent = "Sending…";
     try {
       const result = await api("/api/send", {
         method: "POST",
@@ -513,51 +517,56 @@ function openCompose({ replyTo } = {}) {
         body: JSON.stringify(body),
       });
       if (result.status === "unknown") {
-        $("compose-status").textContent = "Delivery is unknown. Check Gmail Sent before creating another message. This message will not be sent again automatically.";
-        $("compose-send").textContent = "Delivery unknown";
+        composeElement("compose-status").textContent = "Delivery is unknown. Check Gmail Sent before creating another message. This message will not be sent again automatically.";
+        composeElement("compose-send").textContent = "Delivery unknown";
         return;
       }
       if (result.status === "sent_unmirrored") {
-        $("compose-status").textContent = "Gmail accepted this message, but the local copy could not be saved. Do not resend.";
-        $("compose-send").textContent = "Retry local save";
-        $("compose-send").disabled = false;
+        composeElement("compose-status").textContent = "Gmail accepted this message, but the local copy could not be saved. Do not resend.";
+        composeElement("compose-send").textContent = "Retry local save";
+        composeElement("compose-send").disabled = false;
         return;
       }
       if (result.status === "rejected") {
         sessionStorage.removeItem("mailbox.pendingSend");
         pending = null;
         operationId = crypto.randomUUID();
-        for (const field of ["to", "cc", "subject", "body"]) $("compose-" + field).disabled = false;
-        $("compose-status").textContent = "Gmail rejected this message. Review the recipients and try again.";
-        $("compose-send").disabled = false;
-        $("compose-send").textContent = "Send";
+        for (const field of ["to", "cc", "subject", "body"]) composeElement("compose-" + field).disabled = false;
+        composeElement("compose-status").textContent = "Gmail rejected this message. Review the recipients and try again.";
+        composeElement("compose-send").disabled = false;
+        composeElement("compose-send").textContent = "Send";
         return;
       }
       if (result.status !== "sent") throw new Error("Unrecognized delivery status.");
       sessionStorage.removeItem("mailbox.pendingSend");
       toast("Sent.");
       close();
-      await loadFolders();
-      if (state.currentFolder === "sent") await loadMessages("sent");
+      try {
+        await loadFolders();
+        if (state.currentFolder === "sent") await loadMessages("sent");
+      } catch (_refreshError) {
+        // Delivery was confirmed. A stale token/offline refresh cannot undo it.
+        toast("Sent, but the mailbox could not refresh. Reload the page; do not resend.", "error");
+      }
     } catch (e) {
       if (e.code === "authorization_required") {
         sessionStorage.removeItem("mailbox.pendingSend");
         pending = null;
         operationId = crypto.randomUUID();
-        for (const field of ["to", "cc", "subject", "body"]) $("compose-" + field).disabled = false;
-        $("compose-status").textContent = e.message;
-        $("compose-send").disabled = false;
-        $("compose-send").textContent = "Send";
+        for (const field of ["to", "cc", "subject", "body"]) composeElement("compose-" + field).disabled = false;
+        composeElement("compose-status").textContent = e.message;
+        composeElement("compose-send").disabled = false;
+        composeElement("compose-send").textContent = "Send";
         return;
       }
-      $("compose-status").textContent = `Send confirmation unavailable: ${e.message} Check status using the same operation before creating another message.`;
-      $("compose-send").disabled = false;
-      $("compose-send").textContent = "Check send status";
+      composeElement("compose-status").textContent = `Send confirmation unavailable: ${e.message} Check status using the same operation before creating another message.`;
+      composeElement("compose-send").disabled = false;
+      composeElement("compose-send").textContent = "Check send status";
     }
   });
   // The modal already exists. Deferred focus can steal keystrokes from a user
   // who has selected another field (including moving subject text into To).
-  $(isReply ? "compose-body" : "compose-to").focus();
+  composeElement(isReply ? "compose-body" : "compose-to").focus();
 }
 
 // ---------- board (Kanban) view ----------
