@@ -109,6 +109,8 @@ Google calls permissions “scopes.” These allow reading/downloading mail and 
 
 On Mac/Linux, create `Mailbox-private` in your home folder instead. Keep this file on your computer; do not post it on GitHub or paste it into a chat.
 
+**If you closed the dialog before saving the download:** open **Clients → Mailbox on my computer** in your normal browser and maximize the window. Under **Additional information** on the right, find **Client secrets**. Click **+ Add secret** below **Status: Enabled**, then download the new JSON before closing its dialog. Once you have the file, continue with step 4 above.
+
 ## 4. Tell Mailbox where to save your mail
 
 In the extracted app folder, make a copy of `config.example.toml` and name the copy `config.toml`. Open the copy with Notepad (right-click → **Open with → Notepad**). Replace its contents with:
