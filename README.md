@@ -2,7 +2,7 @@
 
 A Gmail reader that runs on your computer and saves your mail as readable text files, original emails, and attachments. Browse a list or a board, organize folders, and send or reply through Gmail. Your saved files remain usable without Mailbox.
 
-This is an early version being tested before public release. Automated tests cover Windows, Linux, and macOS; real-account and desktop checks are still being completed. Mailbox does not upload your archive to a separate hosted service or send usage analytics.
+This is a **Windows beta**. Real Gmail send/reply, sync, token refresh, reauthorization, and Windows file/folder opening have been checked. Core automated tests also cover Linux and macOS, but native desktop integration on those platforms remains unverified. Mailbox does not upload your archive to a separate hosted service or send usage analytics.
 
 ## Start here
 
@@ -17,7 +17,7 @@ The numbered steps below use **Windows**. Mac/Linux differences are included in 
 3. In Downloads, right-click the ZIP and choose **Extract All**. Open the extracted folder, then the folder inside it if needed.
 4. You are in the right folder when you can see `README.md`, `config.example.toml`, and `Mailbox.bat`. Keep this folder; it contains the app.
 
-**While the project is private:** you must sign in to a GitHub account with access. A “404” page can mean your account does not have access. Once the project is public, downloading the ZIP will not require an account.
+You do not need a GitHub account to download the ZIP.
 
 ## 2. Install Mailbox
 
