@@ -78,7 +78,7 @@ Sign in with the Google account you want to use for this setup. Check the profil
 
 1. At the top, open the project selector (it may say **Select a project** or show another project's name).
 2. Choose **New project**, name it `My Mailbox`, and click **Create**. Select that project when creation finishes.
-3. Search the Console for **Gmail API**, open its result, and click **Enable**. If it says **Manage**, it is already enabled.
+3. Open the [Gmail API page directly](https://console.cloud.google.com/apis/library/gmail.googleapis.com). Check that `My Mailbox` is still selected at the top, then click **Enable**. If it says **Manage**, this step is already complete.
 
 ### Add your Gmail account and permissions
 
