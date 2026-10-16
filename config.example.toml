@@ -1,0 +1,16 @@
+# Copy this file to config.toml and edit as needed.
+# config.toml is gitignored.
+
+# Where Mailbox stores email data on disk (OUTSIDE the repo).
+# Created on first run.
+data_dir = "~/Mailbox"
+
+# Path to the OAuth client credentials JSON downloaded from Google Cloud Console.
+# Create a Desktop OAuth client (see README) and save the JSON anywhere readable.
+oauth_client_secrets = "~/Mailbox/.auth/client_secret.json"
+
+# Rolling lookback for each sync; already completed messages are skipped.
+backfill_days = 30
+
+# Local web server port for the UI.
+server_port = 5000

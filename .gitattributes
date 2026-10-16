@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.bat text eol=crlf
+# Preserve the exact upstream bytes checked by the SHA-256 manifest.
+mailbox_app/static/vendor/*.js -text
+mailbox_app/static/vendor/*.LICENSE -text

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="mailbox-token" content="{{ mailbox_token }}">
+  <title>Mailbox</title>
+  <link rel="stylesheet" href="/static/app.css?v=4">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand">Mailbox</div>
+      <div class="topbar-actions">
+        <div class="view-toggle" role="group" aria-label="View mode">
+          <button type="button" data-view="list" class="active">List</button>
+          <button type="button" data-view="board">Board</button>
+        </div>
+        <button id="sync-btn" type="button">Sync</button>
+        <button id="compose-btn" type="button">Compose</button>
+        <span id="status" class="status"></span>
+      </div>
+    </header>
+    <main>
+      <aside id="folders" aria-label="Folders">
+        <ul class="folder-list" id="folder-list"></ul>
+        <button id="new-folder-btn" class="ghost-btn" type="button">+ New folder</button>
+      </aside>
+
+      <section id="messages" aria-label="Messages">
+        <div class="messages-header" id="messages-header">inbox</div>
+        <ul class="message-list" id="message-list"></ul>
+      </section>
+
+      <section id="reader" aria-label="Reader">
+        <div class="reader-empty">Select a message.</div>
+      </section>
+
+      <div id="board" aria-label="Board"></div>
+    </main>
+
+    <div id="ctx-menu" class="ctx-menu" hidden></div>
+    <div id="modal-root"></div>
+    <div id="toast-root" aria-live="polite"></div>
+  </div>
+
+  <script src="/static/vendor/marked.min.js"></script>
+  <script src="/static/vendor/purify.min.js"></script>
+  <script src="/static/app.js?v=4"></script>
+</body>
+</html>

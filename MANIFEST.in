@@ -1,0 +1,9 @@
+include LICENSE NOTICE THIRD_PARTY_NOTICES.md licenses.json
+include config.example.toml requirements*.lock requirements-build.in uv.lock Mailbox.bat
+recursive-include mailbox_app/templates *.html
+recursive-include mailbox_app/static *.js *.css *.json *.LICENSE
+recursive-include tests *.py
+recursive-include scripts *.py
+prune .audit
+prune .venv
+prune .git

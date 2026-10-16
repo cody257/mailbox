@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Local config + secrets
+.env
+.env.*
+!.env.example
+!.env.template
+config.toml
+client_secret*.json
+credentials.json
+token.json
+.claude/
+.claude/settings.local.json
+.vercel/
+.wrangler/
+
+# Logs and local data
+*.log
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# OS
+desktop.ini
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Private mailbox contents and recovery state, wherever accidentally placed.
+.auth/
+.state/
+.originals/
+attachments/
+data/
+inbox/
+sent/
+*.eml
+*.mbox
+*.bak
+*.backup
+!tests/fixtures/
+!tests/fixtures/**
+
+# Test tools and synthetic failure evidence
+.pytest_cache/
+.playwright-cli/
+test-results/
+playwright-report/
+.coverage
+htmlcov/
+.tools/
+.audit/
