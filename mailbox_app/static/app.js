@@ -483,6 +483,11 @@ function openCompose({ replyTo } = {}) {
   `;
   const dialog = root.querySelector(".modal");
   const composeElement = (id) => dialog.querySelector("#" + id);
+  const clearPendingOperation = (completedId) => {
+    // Another dialog may already be sending a newer operation.
+    const saved = JSON.parse(sessionStorage.getItem("mailbox.pendingSend") || "null");
+    if (saved?.operation_id === completedId) sessionStorage.removeItem("mailbox.pendingSend");
+  };
   const close = () => {
     if (root.contains(dialog)) root.innerHTML = "";
   };
@@ -528,7 +533,7 @@ function openCompose({ replyTo } = {}) {
         return;
       }
       if (result.status === "rejected") {
-        sessionStorage.removeItem("mailbox.pendingSend");
+        clearPendingOperation(body.operation_id);
         pending = null;
         operationId = crypto.randomUUID();
         for (const field of ["to", "cc", "subject", "body"]) composeElement("compose-" + field).disabled = false;
@@ -538,7 +543,7 @@ function openCompose({ replyTo } = {}) {
         return;
       }
       if (result.status !== "sent") throw new Error("Unrecognized delivery status.");
-      sessionStorage.removeItem("mailbox.pendingSend");
+      clearPendingOperation(body.operation_id);
       toast("Sent.");
       close();
       try {
@@ -550,7 +555,7 @@ function openCompose({ replyTo } = {}) {
       }
     } catch (e) {
       if (e.code === "authorization_required") {
-        sessionStorage.removeItem("mailbox.pendingSend");
+        clearPendingOperation(body.operation_id);
         pending = null;
         operationId = crypto.randomUUID();
         for (const field of ["to", "cc", "subject", "body"]) composeElement("compose-" + field).disabled = false;

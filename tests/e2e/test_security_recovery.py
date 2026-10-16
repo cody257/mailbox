@@ -65,6 +65,37 @@ def test_late_send_response_does_not_close_a_replacement_dialog(mailbox_page, li
     assert len(env.gmail.sent) == 1
 
 
+def test_old_send_confirmation_preserves_newer_pending_operation(mailbox_page, live_mailbox):
+    page, env = mailbox_page, live_mailbox
+    held = []
+    page.route('**/api/send', lambda route: held.append(route))
+    compose(page, 'First operation')
+    with page.expect_request(lambda request: request.url.endswith('/api/send')):
+        page.locator('#compose-send').click()
+    page.locator('#compose-close').click()
+    page.locator('#compose-btn').click()
+    with page.expect_request(lambda request: request.url.endswith('/api/send')):
+        page.locator('#compose-send').click()
+    with page.expect_response(lambda response: response.url.endswith('/api/send')):
+        held[1].continue_()
+    expect(page.locator('#compose-send')).to_have_count(0)
+    compose(page, 'Second operation')
+    with page.expect_request(lambda request: request.url.endswith('/api/send')) as newer:
+        page.locator('#compose-send').click()
+    # Finishing the older request must not discard the new send's recovery ID.
+    with page.expect_response(lambda response: response.url.endswith('/api/folders')):
+        held[0].continue_()
+    saved = page.evaluate('JSON.parse(sessionStorage.getItem("mailbox.pendingSend"))')
+    try:
+        assert saved == newer.value.post_data_json
+        expect(page.locator('#compose-subject')).to_have_value('Second operation')
+    finally:
+        with page.expect_response(lambda response: response.url.endswith('/api/send')):
+            held[2].continue_()
+    expect(page.locator('#compose-send')).to_have_count(0)
+    assert len(env.gmail.sent) == 2
+
+
 def test_partial_sync_shows_failure_and_retry_guidance(mailbox_page, live_mailbox):
     page, env = mailbox_page, live_mailbox
     # A real filesystem obstruction fails one import; the others still work.
