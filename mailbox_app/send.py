@@ -82,7 +82,9 @@ def send_message(
             msg['Cc'] = cc
         msg['Subject'] = subject
         msg['Date'] = formatdate(localtime=True)
-        msg['Message-ID'] = make_msgid()
+        # Avoid a potentially blocking hostname lookup (and leaking the local
+        # machine name) while the mailbox mutation lock is held.
+        msg['Message-ID'] = make_msgid(domain='mailbox.invalid')
         if in_reply_to:
             msg['In-Reply-To'] = in_reply_to
             msg['References'] = (' '.join(references) if isinstance(references, list) else references) or in_reply_to

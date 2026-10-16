@@ -100,6 +100,14 @@ class RecoveryTests(unittest.TestCase):
                 self.assertNotIn('private', str(result))
         self.assertEqual(self.service.sends, 1)
 
+    def test_sending_does_not_resolve_or_expose_the_local_hostname(self):
+        with patch.object(send, 'build_service', return_value=self.service), patch(
+            'socket.getfqdn', side_effect=AssertionError('Local hostname lookup is unavailable')
+        ):
+            result = send.send_message(self.paths, to='to@example.com', operation_id='no-dns')
+        self.assertEqual(result['status'], 'sent')
+        self.assertEqual(self.service.sends, 1)
+
     def test_unknown_send_survives_fresh_python_process(self):
         self.service.mode = 'unknown'
         with patch.object(send, 'build_service', return_value=self.service):
