@@ -2,6 +2,8 @@
 
 A Gmail reader that runs on your computer and saves your mail as readable text files, original emails, and attachments. Browse a list or a board, organize folders, and send or reply through Gmail. Your saved files remain usable without Mailbox.
 
+Mailbox is built for working with AI agents. Instead of giving each AI app its own Gmail connection, you get one folder of plain text that Codex, Claude Code, opencode, or any agent that reads files can search, summarize, and build on. See [Use with AI agents](#use-with-ai-agents).
+
 This is a **Windows beta**. Real Gmail send/reply, sync, token refresh, reauthorization, and Windows file/folder opening have been checked. Core automated tests also cover Linux and macOS, but native desktop integration on those platforms remains unverified. Mailbox does not upload your archive to a separate hosted service or send usage analytics.
 
 ## Start here
@@ -154,6 +156,33 @@ Mailbox opens in your browser. If it does not, type `http://localhost:5000` into
 - The UI can read already-synced files while offline. Sync/send need Google connectivity. Browser assets are bundled locally; remote message images are blocked.
 
 Google connections left in Testing have [seven-day authorization expiry](https://support.google.com/cloud/answer/15549945?hl=en), so you may need to sign in again. See **Expired/revoked sign-in** under Troubleshooting when this happens. A work/school account may require your administrator's approval.
+
+## Use with AI agents
+
+Open your agent in the `Mailbox-private` folder and ask it about your mail. Compared with connecting Gmail to each AI app:
+
+- One archive works with every agent, so you are not tied to one vendor's plugin.
+- Agents can search everything at once and follow whole threads. Each Markdown file starts with `from`, `to`, `cc`, `date`, `subject`, `in-reply-to`, and `references`.
+- You own the Google connection, and Mailbox sends only when you click Send.
+- Synced mail stays readable offline and without Mailbox.
+
+Let agents read `inbox/`, `sent/`, and your own folders. Keep them away from `client_secret.json` and `mail/.auth/`: the token there can read and send your Gmail. Treat `.state/` and `.originals/` as read-only. If your agent uses a cloud model, the messages it reads are sent to that model's provider; use a local model if mail must stay on your computer.
+
+### Build a knowledge base from your inbox
+
+This follows Andrej Karpathy's "LLM wiki" idea: an agent reads raw sources and keeps a set of linked pages about them up to date. Mailbox is the raw source. Keep the agent's pages beside the mail folder, not inside it, so they do not appear as Mailbox folders:
+
+```text
+Mailbox-private/
+  mail/          Mailbox data_dir; agents read, never edit
+  wiki/          Pages the agent writes and maintains
+    AGENTS.md    Your rules: page formats, linking, never edit ../mail
+    people/
+    projects/
+    log.md       What the agent processed and when
+```
+
+After each sync, ask the agent to read new messages, update the relevant pages with links back to the source Markdown files, and add an entry to `log.md`. Codex and opencode read `AGENTS.md`; for Claude Code, add a `CLAUDE.md` that points to it.
 
 ## Data and security
 
